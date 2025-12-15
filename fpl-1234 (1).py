@@ -1109,7 +1109,7 @@ try:
     from huggingface_hub import InferenceClient
     
     # Check if HF token is available
-    HF_TOKEN = st.secrets.get("HF_TOKEN", os.getenv("HF_TOKEN", "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"))
+    HF_TOKEN = st.secrets.get("HF_TOKEN", os.getenv("HF_TOKEN", "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"))
     
     client = InferenceClient(api_key=HF_TOKEN)
     st.session_state.llm_available = True
@@ -1283,7 +1283,7 @@ from neo4j import GraphDatabase
 # =================================================
 # HUGGINGFACE TOKEN
 # =================================================
-HF_TOKEN = "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"
+HF_TOKEN = "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"
 client = InferenceClient(token=HF_TOKEN)
 
 # =================================================
@@ -1721,4 +1721,5 @@ NEO4J_PASSWORD = "your_password_here"
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
