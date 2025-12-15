@@ -8,3 +8,4 @@ transformers
 huggingface-hub
 matplotlib
 seaborn
+networkx
