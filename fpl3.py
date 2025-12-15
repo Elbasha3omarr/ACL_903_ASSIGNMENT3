@@ -1073,7 +1073,7 @@ from huggingface_hub import InferenceClient
 
 config = read_config(config_path)
 
-HF_TOKEN = "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"
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 client = InferenceClient(api_key=HF_TOKEN)
 
@@ -1644,6 +1644,7 @@ def run_streamlit_app():
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
 
 
