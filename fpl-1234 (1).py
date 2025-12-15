@@ -44,20 +44,44 @@ print(torch.cuda.is_available())  # Should print False
 
 # Cell 3: Read Neo4j configuration
 def read_config(config_file="Neo4j-5c3078ea-Created-2025-11-17.txt"):
-    """Read Neo4j configuration from file"""
+    """Read Neo4j configuration from Streamlit secrets, file, or environment"""
     config = {}
-    with open(config_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith('#') or not line:
-                continue
-            if '=' in line:
-                key, value = line.split('=', 1)
-                config[key.strip()] = value.strip()
-
-    config['URI'] = config.get('NEO4J_URI') or config.get('URI')
-    config['USERNAME'] = config.get('NEO4J_USERNAME') or config.get('USERNAME')
-    config['PASSWORD'] = config.get('NEO4J_PASSWORD') or config.get('PASSWORD')
+    
+    # Try Streamlit secrets first (for Streamlit Cloud)
+    try:
+        config = {
+            'URI': st.secrets["NEO4J_URI"],
+            'USERNAME': st.secrets["NEO4J_USERNAME"],
+            'PASSWORD': st.secrets["NEO4J_PASSWORD"]
+        }
+        return config
+    except:
+        pass
+    
+    # Try reading from file (for local development)
+    try:
+        with open(config_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('#') or not line:
+                    continue
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    config[key.strip()] = value.strip()
+        
+        config['URI'] = config.get('NEO4J_URI') or config.get('URI')
+        config['USERNAME'] = config.get('NEO4J_USERNAME') or config.get('USERNAME')
+        config['PASSWORD'] = config.get('NEO4J_PASSWORD') or config.get('PASSWORD')
+        return config
+    except:
+        pass
+    
+    # Fallback to environment variables
+    config = {
+        'URI': os.getenv('NEO4J_URI', 'neo4j+s://5c3078ea.databases.neo4j.io'),
+        'USERNAME': os.getenv('NEO4J_USERNAME', 'neo4j'),
+        'PASSWORD': os.getenv('NEO4J_PASSWORD', 'B1StqtGDu90Z9BFqB8SWlcKYgtwLfdWH0xVkmyYzzm4')
+    }
     return config
 
 
@@ -1509,7 +1533,6 @@ def format_response(intent: str, data: List[Dict]) -> str:
 # ============================================================================
 # STREAMLIT APP (REPLACE YOUR ENTIRE STREAMLIT SECTION)
 # ============================================================================
-
 def run_streamlit_app():
     """Main Streamlit application"""
     st.set_page_config(page_title="FPL Graph-RAG Assistant", layout="wide", page_icon="⚽")
@@ -1518,20 +1541,24 @@ def run_streamlit_app():
     if "history" not in st.session_state:
         st.session_state.history = []
     
+    # Initialize components with caching
     if "preprocessor" not in st.session_state:
         with st.spinner("🔄 Loading models and connecting to Knowledge Graph..."):
             try:
-                # Initialize preprocessor with KG data
-                config = read_config(config_path)
+                # Read config
+                config = read_config()
+                
+                # Initialize executor
                 executor = Neo4jQueryExecutor(config['URI'], config['USERNAME'], config['PASSWORD'])
                 
-                # Fetch team and player names
+                # Fetch team and player names from KG
                 team_records = executor.execute_query("MATCH (t:Team) RETURN t.name AS name")
                 team_names = [record['name'] for record in team_records] if team_records else []
                 
-                player_records = executor.execute_query("MATCH (p:Player) RETURN p.player_name AS name")
+                player_records = executor.execute_query("MATCH (p:Player) RETURN p.player_name AS name LIMIT 100")
                 player_names = [record['name'] for record in player_records] if player_records else []
                 
+                # Initialize preprocessor
                 st.session_state.preprocessor = FPLInputPreprocessor(
                     embedding_model_name="all-MiniLM-L6-v2",
                     team_names_from_kg=team_names,
@@ -1542,7 +1569,14 @@ def run_streamlit_app():
                 
             except Exception as e:
                 st.error(f"❌ Initialization Error: {str(e)}")
+                st.info("💡 **For Streamlit Cloud:** Add your Neo4j credentials in Settings → Secrets")
+                st.code("""
+NEO4J_URI = "neo4j+s://5c3078ea.databases.neo4j.io"
+NEO4J_USERNAME = "neo4j"
+NEO4J_PASSWORD = "your_password_here"
+                """)
                 st.stop()
+                return
     
     # Sidebar
     with st.sidebar:
@@ -1558,7 +1592,7 @@ def run_streamlit_app():
             st.rerun()
         
         st.divider()
-        st.success(f"✅ Connected to Neo4j")
+        st.success("✅ Connected to Neo4j")
         st.info("💡 **Try asking:**\n\n"
                 "• How many goals did Salah score?\n"
                 "• Compare Haaland and Kane\n"
@@ -1577,8 +1611,7 @@ def run_streamlit_app():
         query = st.text_input(
             "Your question:",
             placeholder="e.g., How many goals did Mohamed Salah score?",
-            label_visibility="collapsed",
-            key="query_input"
+            label_visibility="collapsed"
         )
     
     with col2:
@@ -1618,9 +1651,10 @@ def run_streamlit_app():
                 st.success("✅ Query processed successfully!")
                 
             except Exception as e:
-                st.error(f"❌ Error processing query: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+                st.error(f"❌ Error: {str(e)}")
+                if show_debug:
+                    import traceback
+                    st.code(traceback.format_exc())
     
     # Display conversation history
     if st.session_state.history:
@@ -1629,25 +1663,21 @@ def run_streamlit_app():
         
         for i, turn in enumerate(reversed(st.session_state.history)):
             with st.container():
-                # Query header
                 st.markdown(f"### 🧑 Query {len(st.session_state.history) - i}: {turn['query']}")
                 
-                # Create columns for KG data and answer
                 col1, col2 = st.columns([2, 3])
                 
                 with col1:
                     st.markdown("**📊 Knowledge Graph Results**")
                     
-                    if show_kg_data:
-                        if turn['results']:
-                            # Display as dataframe if possible
-                            try:
-                                df = pd.DataFrame(turn['results'])
-                                st.dataframe(df, use_container_width=True)
-                            except:
-                                st.json(turn['results'])
-                        else:
-                            st.info("No data found in Knowledge Graph")
+                    if show_kg_data and turn['results']:
+                        try:
+                            df = pd.DataFrame(turn['results'])
+                            st.dataframe(df, use_container_width=True)
+                        except:
+                            st.json(turn['results'])
+                    elif not turn['results']:
+                        st.info("No data found")
                     else:
                         st.info(f"Found {len(turn['results'])} records")
                 
@@ -1655,35 +1685,29 @@ def run_streamlit_app():
                     st.markdown("**💬 Answer**")
                     st.info(turn['answer'])
                 
-                # Debug information
                 if show_debug:
                     with st.expander("🔧 Technical Details"):
                         col_a, col_b = st.columns(2)
                         
                         with col_a:
-                            st.write("**Intent Classification:**")
-                            st.write(f"- Intent: `{turn['intent']}`")
-                            st.write(f"- Confidence: `{turn['confidence']:.2f}`")
-                            st.write(f"- Entities: `{turn['entities']}`")
+                            st.write("**Intent:**", turn['intent'])
+                            st.write("**Confidence:**", f"{turn['confidence']:.2f}")
+                            st.write("**Entities:**", turn['entities'])
                         
                         with col_b:
-                            st.write("**Query Parameters:**")
+                            st.write("**Parameters:**")
                             st.json(turn['params'])
                         
-                        st.write("**Generated Cypher Query:**")
                         st.code(turn['cypher'].strip(), language="cypher")
                 
                 st.divider()
-    
     else:
-        # Empty state
         st.info("👋 Welcome! Ask your first FPL question above to get started.")
 
+
 # ============================================================================
-# RUN THE APP
+# ADD THIS AT THE VERY END OF YOUR NOTEBOOK
 # ============================================================================
 
 if __name__ == "__main__":
     run_streamlit_app()
-
-
