@@ -1,6 +1,11 @@
 streamlit
+matplotlib
 pandas
-neo4j
+numpy
 sentence-transformers
+neo4j
 pyvis
-networkx
+plotly
+watchdog
+transformers
+torch
