@@ -43,7 +43,7 @@ print(torch.cuda.is_available())  # Should print False
 
 
 # Cell 3: Read Neo4j configuration
-def read_config(config_file="D:\\GUC\\semester 9\\ACL\\Neo4j-5c3078ea-Created-2025-11-17.txt"):
+def read_config(config_file="Neo4j-5c3078ea-Created-2025-11-17.txt"):
     """Read Neo4j configuration from file"""
     config = {}
     with open(config_file, 'r') as f:
@@ -546,7 +546,7 @@ class FPLGraphRAGPreprocessor:
 
 
 # Initialize pipeline
-config_path = "D:\\GUC\\semester 9\\ACL\\Neo4j-5c3078ea-Created-2025-11-17.txt"
+config_path = "Neo4j-5c3078ea-Created-2025-11-17.txt"
 pipeline = FPLGraphRAGPreprocessor(config_path)
 
 team_names = pipeline.team_names
@@ -1685,4 +1685,5 @@ def run_streamlit_app():
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
