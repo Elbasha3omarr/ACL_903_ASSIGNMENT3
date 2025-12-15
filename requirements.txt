@@ -1,0 +1,6 @@
+streamlit
+pandas
+neo4j
+sentence-transformers
+pyvis
+networkx
