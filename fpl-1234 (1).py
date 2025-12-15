@@ -1105,26 +1105,33 @@ import requests
 # In[ ]:
 
 
-from huggingface_hub import InferenceClient
-
-
-# In[ ]:
-
-
-config = read_config(config_path)
-client = InferenceClient(api_key='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')
+try:
+    from huggingface_hub import InferenceClient
+    
+    # Check if HF token is available
+    HF_TOKEN = st.secrets.get("HF_TOKEN", os.getenv("HF_TOKEN", "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"))
+    
+    client = InferenceClient(api_key=HF_TOKEN)
+    st.session_state.llm_available = True
+except Exception as e:
+    st.warning(f"⚠️ HuggingFace API not available: {e}. Continuing without LLM generation.")
+    client = None
+    st.session_state.llm_available = False
 
 def llm_generate(prompt: str,
-                        model="deepseek-ai/DeepSeek-V3",
-                        max_tokens=128):
-
-    completion = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens
-    )
-
-    return completion.choices[0].message["content"]
+                model="deepseek-ai/DeepSeek-V3",
+                max_tokens=128):
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens
+        )
+        return completion.choices[0].message["content"]
+    except Exception as e:
+        st.error(f"❌ LLM API Error: {str(e)}")
+        # Fallback to rule-based response
+        return "I apologize, but I'm having trouble generating a response. The data from the knowledge graph is shown above."
 
 
 # In[ ]:
@@ -1176,58 +1183,60 @@ def format_generic(rows: list[dict]) -> str:
 
 def userQueryKG(queryList: List[str], model="deepseek-ai/DeepSeek-V3"):
     for i, query in enumerate(queryList, 1):
-        processed = preprocessor.process(query)
+        try:
+            processed = preprocessor.process(query)
 
-        executor = Neo4jQueryExecutor(config['URI'], config['USERNAME'], config['PASSWORD'])
-        results = run_processed_query(executor, processed)
-        executor.close()
+            executor = Neo4jQueryExecutor(config['URI'], config['USERNAME'], config['PASSWORD'])
+            results = run_processed_query(executor, processed)
+            executor.close()
 
-        if results is None or len(results) == 0:
-            print(f"No results found for query: {query}")
+            if results is None or len(results) == 0:
+                st.warning(f"No results found for query: {query}")
+                continue
+
+            if processed.intent == 'player_performance':
+                context_text = format_player_performance(results)
+            elif processed.intent == 'player_comparison':
+                context_text = format_player_comparison(results)
+            else:
+                context_text = format_generic(results)
+
+            # Try LLM, but show results even if LLM fails
+            st.write(f"**Query {i}:** {query}")
+            st.write(f"**Entities:** {processed.entities}")
+            st.write(f"**Context from KG:** {context_text}")
+            
+            try:
+                persona = "You are an expert FPL AI assistant."
+                task = """Answer the user's question in one sentence using ONLY the data provided. 
+                Omit any unnecessary context. The context is provided from the knowledge graph."""
+
+                llm_prompt = f"""
+                  Persona: {persona}
+                  Task: {task}
+                  Context (Retrieved from the knowledge graph): {context_text}
+                  User Query: {query}
+                """
+
+                response = llm_generate(llm_prompt, model=model)
+                st.success(f"**Response:** {response.strip()}")
+            except Exception as llm_error:
+                st.info(f"**Direct Answer:** {context_text}")
+                st.caption(f"(LLM unavailable: {str(llm_error)})")
+            
+            st.divider()
+            
+        except Exception as e:
+            st.error(f"❌ Error processing query '{query}': {str(e)}")
             continue
-
-        if processed.intent == 'player_performance':
-            context_text = format_player_performance(results)
-            output_template = "{player} scored {total_goals} goals."
-        elif processed.intent == 'player_comparison':
-            context_text = format_player_comparison(results)
-            output_template = "{player} scored {goals} goals and earned {points} points."
-        else:
-            context_text = format_generic(results)
-
-        persona = "You are an expert FPL AI assistant."
-        task = """Answer the user's question in one sentence using ONLY the data provided. Omit any unecessary context.
-        The contex is provided from the knowledge graph."""
-
-        llm_prompt = f"""
-          Persona:
-          {persona}
-
-          Task:
-          {task}
-
-          Context (Retreived from the knowledge graph):
-          {context_text}
-
-          User Query:
-          {query}
-          """
-
-        response = llm_generate(llm_prompt, model=model)
-
-        print(f"Query {i}: {query}")
-        print(f"Entities: {processed.entities}")
-        print(f"Context: {context_text}")
-        print(f"Response: {response.strip()}")
-        print("-" * 80)
 
 
 # In[ ]:
 
-
-hf_model1 = "deepseek-ai/DeepSeek-V3"
-hf_model2 = "deepseek-ai/DeepSeek-V3-0324"
-hf_model3 = "meta-llama/Llama-3.3-70B-Instruct"
+# Use smaller, more reliable models
+hf_model1 = "HuggingFaceH4/zephyr-7b-beta"  # More stable
+hf_model2 = "meta-llama/Llama-3.1-8B-Instruct"  # Alternative
+hf_model3 = "google/gemma-2-9b-it"  # Another option
 queries = ["How many goals did Mohamed Salah score in 2022-23?",
            "How did Arsenal perform this season?",
            "Which midfielder should I pick for my team?",
@@ -1240,8 +1249,9 @@ queries = ["How many goals did Mohamed Salah score in 2022-23?",
 # In[ ]:
 
 
-userQueryKG(queries, hf_model1)
-
+if st.button("Run Test Queries"):
+    with st.spinner("Processing queries..."):
+        userQueryKG(queries, hf_model1)
 
 # In[ ]:
 
@@ -1711,3 +1721,4 @@ NEO4J_PASSWORD = "your_password_here"
 
 if __name__ == "__main__":
     run_streamlit_app()
+
