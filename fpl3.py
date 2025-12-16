@@ -1149,12 +1149,18 @@ def format_generic(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def userQueryKG(userQuery: str, model="deepseek-ai/DeepSeek-V3", traceQuery=False):
-    processed = preprocessor.process(userQuery)
+def userQueryKG(userQuery: str, model="deepseek-ai/DeepSeek-V3", traceQuery=False, 
+                preprocessor_instance=None, executor_instance=None):
+    # Use provided instances or fall back to globals
+    proc = preprocessor_instance if preprocessor_instance else preprocessor
+    processed = proc.process(userQuery)
 
-    executor = Neo4jQueryExecutor(config['URI'], config['USERNAME'], config['PASSWORD'])
-    results = run_processed_query(executor, processed)
-    executor.close()
+    if executor_instance:
+        results = run_processed_query(executor_instance, processed)
+    else:
+        executor = Neo4jQueryExecutor(config['URI'], config['USERNAME'], config['PASSWORD'])
+        results = run_processed_query(executor, processed)
+        executor.close()
 
     if results is None or len(results) == 0:
         print(f"No results found for query: {userQuery}")
@@ -1549,15 +1555,46 @@ def run_streamlit_app():
         with st.spinner("🤔 Processing your query..."):
             try:
                 # Use the working userQueryKG function instead
-                answer, tokens_used = userQueryKG(query, hf_model1, traceQuery=False)
-                
-                # Also get the technical details for debug view
+                # Process once with the session preprocessor
                 processed = st.session_state.preprocessor.process(query)
+                
+                # Generate Cypher and get results
                 cypher_query = st.session_state.query_generator.get_query_template(processed)
                 results = st.session_state.executor.execute_query(
                     cypher_query,
                     processed.cypher_params
                 )
+                
+                # Format context for LLM (same as userQueryKG does)
+                if results is None or len(results) == 0:
+                    answer = "I couldn't find any relevant data in the Knowledge Graph for your query."
+                    tokens_used = 0
+                else:
+                    # Format context based on intent
+                    if processed.intent == 'player_performance':
+                        context_text = format_player_performance(results)
+                    elif processed.intent == 'player_comparison':
+                        context_text = format_player_comparison(results)
+                    else:
+                        context_text = format_generic(results)
+                    
+                    # Call LLM
+                    persona = "You are an expert FPL AI assistant."
+                    task = """Answer the user's question in one sentence using ONLY the data provided. 
+                    Omit any unnecessary context. The context is provided from the knowledge graph."""
+                    
+                    llm_prompt = f"""
+                        Persona: {persona}
+                        Task: {task}
+                        Context (Retrieved from the knowledge graph): {context_text}
+                        User Query: {query}
+                    """
+                    
+                    answer, tokens_used = llm_generate(llm_prompt, model=hf_model1)
+                    
+                    if not answer:
+                        answer = format_response(processed.intent, results)
+                        tokens_used = 0
                 
                 # Step 5: Save to history
                # Step 5: Save to history
@@ -1643,6 +1680,7 @@ def run_streamlit_app():
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
 
 
