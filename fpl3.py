@@ -980,25 +980,25 @@ def run_processed_query2(executor: Neo4jQueryExecutor, processed: ProcessedInput
 config = read_config(config_path)
 
 HF_TOKEN = config["HF_KEY"]
-OR_TOKEN = config["OR_KEY"]
+# OR_TOKEN = config["OR_KEY"]
 
 client = InferenceClient(api_key=HF_TOKEN)
 
-client_open = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OR_TOKEN
-)
+# client_open = OpenAI(
+#     base_url="https://openrouter.ai/api/v1",
+#     api_key=OR_TOKEN
+# )
 
-# OpenRouter
-def llm_generate2(prompt: str, model="openai/gpt-oss-20b:free"):
-    response = client_open.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-    )
+# # OpenRouter
+# def llm_generate2(prompt: str, model="openai/gpt-oss-20b:free"):
+#     response = client_open.chat.completions.create(
+#         model=model,
+#         messages=[
+#             {"role": "user", "content": prompt}
+#         ],
+#     )
 
-    return response.choices[0].message.content, response.usage.total_tokens
+#     return response.choices[0].message.content, response.usage.total_tokens
 
 # HuggingFace
 def llm_generate(prompt: str,
@@ -1453,5 +1453,6 @@ def run_streamlit_app():
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
 
