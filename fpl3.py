@@ -979,7 +979,7 @@ def run_processed_query2(executor: Neo4jQueryExecutor, processed: ProcessedInput
 
 config = read_config(config_path)
 
-HF_TOKEN = config["HF_KEY"]
+HF_TOKEN = os.getenv("HF_TOKEN")
 # OR_TOKEN = config["OR_KEY"]
 
 client = InferenceClient(api_key=HF_TOKEN)
@@ -1453,6 +1453,7 @@ def run_streamlit_app():
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
 
 
