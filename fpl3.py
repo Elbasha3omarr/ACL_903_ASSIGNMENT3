@@ -1544,25 +1544,23 @@ def run_streamlit_app():
         run_button = st.button("🔍 Ask", type="primary", use_container_width=True)
     
     # Process query
+    # Process query
     if run_button and query:
         with st.spinner("🤔 Processing your query..."):
             try:
-                # Step 1: Preprocess
+                # Use the working userQueryKG function instead
+                answer, tokens_used = userQueryKG(query, hf_model1, traceQuery=False)
+                
+                # Also get the technical details for debug view
                 processed = st.session_state.preprocessor.process(query)
-                
-                # Step 2: Generate Cypher
                 cypher_query = st.session_state.query_generator.get_query_template(processed)
-                
-                # Step 3: Execute query
                 results = st.session_state.executor.execute_query(
                     cypher_query,
                     processed.cypher_params
                 )
                 
-                # Step 4: Format response
-                answer = format_response(processed.intent, results)
-                
                 # Step 5: Save to history
+               # Step 5: Save to history
                 st.session_state.history.append({
                     "query": query,
                     "intent": processed.intent,
@@ -1571,7 +1569,8 @@ def run_streamlit_app():
                     "cypher": cypher_query,
                     "params": processed.cypher_params,
                     "results": results,
-                    "answer": answer
+                    "answer": answer if answer else "No response generated",
+                    "tokens_used": tokens_used
                 })
                 
                 st.success("✅ Query processed successfully!")
@@ -1644,6 +1643,7 @@ def run_streamlit_app():
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
 
 
