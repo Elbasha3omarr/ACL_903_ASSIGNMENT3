@@ -22,11 +22,11 @@ from collections import Counter
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["PYTORCH_ENABLE_MEMMAP"] = "0"
 
-config_path = "config.txt"
+config_path = "config"
 
 test_all = False
 
-def read_config(config_file="config.txt"):
+def read_config(config_file="config"):
     """Read Neo4j configuration from file"""
     config = {}
     with open(config_file, 'r') as f:
@@ -1453,4 +1453,5 @@ def run_streamlit_app():
 
 if __name__ == "__main__":
     run_streamlit_app()
+
 
